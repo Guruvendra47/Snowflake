@@ -1,4 +1,4 @@
-# 🌈 Snowflake Data Types (Very Easy Words)
+# 🌈 Snowflake Data Types
 
 ## 🔢 Numbers
 
