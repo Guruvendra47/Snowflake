@@ -1,63 +1,161 @@
-# Snowflake — Internal Data Load (GitHub Project)
+# ❄️ Internal Stage Data Loading in Snowflake
+**All required SQL scripts and data files have been uploaded to the GitHub repository under the "Data" and "SQL" folders for your reference.**
 
-## Overview
-This repo demonstrates a clear, repeatable **internal** data-loading workflow into Snowflake (local/internal stage). It's built from user's notes and expanded to be GitHub-ready. The focus is step-by-step: **role -> warehouse -> database -> schema -> stage -> file format -> table -> load -> dedup/checks**. Use this as reference and copy into your own projects.
+## Step 1 — Use a powerful role
 
-### What you'll find
-- `sql/setup.sql` — statements to create roles, warehouse, database, schema, stage, file format, and table.
-- `sql/load_and_validate.sql` — COPY, validation, dedup detection + MERGE pattern for idempotent loads.
-- `data/sample_customers.csv` — example CSV to test the pipeline (small sample).
-- `.gitignore` — ignore local artifacts for Git.
+A role with full privileges is required to create warehouses, databases, schemas, and stages.
+```sql
+USE ROLE ACCOUNTADMIN;
+```
+This ensures you won’t face access issues while creating objects.
 
----
-## Step-by-step guide (as requested)
-**Format**: Step 1 → Step 5 and brief explanation for each step (so you can refer from GitHub quickly).
+## Step 2 — Create and select Warehouse
+A warehouse is the compute engine that performs loading and querying.
+```sql
+CREATE WAREHOUSE IF NOT EXISTS DEMO_WAREHOUSE;
+USE WAREHOUSE DEMO_WAREHOUSE;
+```
+**Note:** Data loading will not work unless a warehouse is active.
 
-### Step 1 — Create role, warehouse, database, schema, stage
-Why: clear separation of privileges and compute. Roles let you control access; warehouse controls compute cost; database/schema organize objects; stage stores files before loading.
-Key example (see `sql/setup.sql`):
-- `CREATE ROLE IF NOT EXISTS demo_role;`
-- `CREATE WAREHOUSE IF NOT EXISTS demo_warehouse;` and `USE WAREHOUSE demo_warehouse;`
-- `CREATE DATABASE IF NOT EXISTS demo_database;` and `CREATE SCHEMA IF NOT EXISTS demo_schema;`
-- `CREATE STAGE IF NOT EXISTS demo_stage;` (internal stage)
+## Step 3 — Create and select Database
+A database is a logical container for schemas, tables, stages, and file formats.
+```sql
+CREATE DATABASE IF NOT EXISTS DEMO_DATABASE;
+USE DEMO_DATABASE;
+```
+**Note:** Think of a database like a project folder.
 
-### Step 2 — File format
-Why: Consistent parsing of incoming files. Having a named FILE FORMAT makes COPY reusable and maintenance easier.
-- Example in `sql/setup.sql` (`CUSTOMER_CSV_FF`) set to CSV, skip header, error controls, delimiter config.
+## Step 4 — Create and select Schema
+Schemas help you organize Snowflake objects inside a database.
+```sql
+CREATE SCHEMA IF NOT EXISTS DEMO_SCHEMA;
+USE SCHEMA DEMO_SCHEMA;
+```
+**For example:** DEMO_SCHEMA contains your table, stage, and file formats.
 
-### Step 3 — Create table schema
-Why: The table is the canonical destination. Define appropriate types and any constraints (Snowflake doesn't enforce primary keys by default).
-- The project includes `CUSTOMER_CVS_FF` table (note: intentionally keep names consistent with your notes).
+## Step 5 — Create Internal Stage
+An **Internal Stage** stores the files you want to load.
+```sql
+CREATE STAGE IF NOT EXISTS DEMO_STAGE;
+```
+This is where we will place files before loading them into a table.
 
-### Step 4 — Load the data (stage → table)
-Two ways you described:
-- Direct table INSERTs (client-side uploads) — repeated identical loads may create duplicates.
-- Stage-based loads: put files into a stage, then `COPY INTO` the table from that stage using the file format. Staging + COPY is the recommended pattern for large/batched files.
-- `sql/load_and_validate.sql` contains `PUT`/`LIST`/`COPY INTO` examples and an idempotent MERGE approach.
+**Note:** Internal stages are fully managed by Snowflake — no external cloud storage required.
 
-Why use stage-first? You can validate file metadata and control idempotency (by using a control column like `source_file` + `loaded_at` or by staging into a temporary table then deduplicating).
+## Step 6 — Create File Format
+A file format tells Snowflake how to read your CSV file.
+```sql
+CREATE FILE FORMAT IF NOT EXISTS DEMO_DATABASE.DEMO_SCHEMA.CUSTOMER_CSV_FF  
+TYPE = 'CSV'  
+COMPRESSION = 'AUTO'  
+FIELD_DELIMITER = ','  
+RECORD_DELIMITER = '\n'  
+SKIP_HEADER = 1  
+SKIP_BLANK_LINES = TRUE  
+ERROR_ON_COLUMN_COUNT_MISMATCH = TRUE;
+```
+**Note:** Why this is important:
+              - Snowflake knows how rows are separated
+              - Snowflake handles missing lines and headers
+              - Snowflake validates column structure (data quality)
+              
+## Step 7 — Create Target Table
+This is where your final data will be stored.
+```sql
+CREATE OR REPLACE TABLE DEMO_DATABASE.DEMO_SCHEMA.CUSTOMER_CVS_FF (  
+CUST_ID VARCHAR(50) Primary key,  
+CREDIT_CARD_NUMBER VARCHAR(50),  
+BALANCE NUMBER(10,2),  
+PURCHASES NUMBER(10,2),  
+INSTALLMENTS_PURCHASES NUMBER(10,2),  
+CASH_ADVANCE NUMBER(10,2),  
+CREDIT_LIMIT NUMBER(10,2),  
+PAYMENTS NUMBER(10,2),  
+MINIMUM_PAYMENTS NUMBER(10,2),  
+TENURE NUMBER(10,2),  
+DATE_OF_TXN DATE  
+);
+```
+**Note:** Primary keys are optional in Snowflake and are not enforced during loading. Duplicate values may exist unless you check them manually.
 
-### Step 5 — Check for duplicates and validation
-Why: Snowflake does not force a primary key—so check after load. The repo includes queries to detect duplicates and a MERGE pattern to safely handle re-loads without blindly duplicating rows.
-- Example duplicate check provided in `sql/load_and_validate.sql` (GROUP BY + HAVING > 1).
 
----
-## How to use
-1. Open `sql/setup.sql` and run in Snowflake worksheet (or from CLI using `snowsql`).
-2. Upload `data/sample_customers.csv` to the `demo_stage` via Snowflake UI or use `PUT` if using SnowSQL (internal stage only works with SnowSQL for PUT). See notes in `sql/load_and_validate.sql`.
-3. Run `sql/load_and_validate.sql` to COPY the file, validate, and deduplicate if needed.
-4. Inspect duplicate queries and the MERGE pattern included for idempotent loads.
+# ⭐ Step 8 — Load File INTO STAGE (MANUALLY USING SNOWFLAKE UI)
 
----
-## Notes / pro tips
-- Use `VALIDATION_MODE = RETURN_ERRORS` on COPY INTO if you want to preview parsing errors without loading.
-- Use a staging (temp) table + MERGE to make loads idempotent.
-- Keep `ERROR_ON_COLUMN_COUNT_MISMATCH = TRUE` during development; for production you may relax and capture rejected files into an error table.
-- Always record `source_file` and `loaded_at` for each batch to improve traceability.
+This step uploads your CSV file into the internal stage.
 
----
-If you want, I can now:
-- Produce more realistic sample CSVs (thousands of rows) and include them in the zip.
-- Add a `README` badge and GitHub Actions workflow to run validations automatically.
-- Move next to **external** loads (AWS S3) when you say *next*.
+**Why this step is required?**
 
+Before loading into a table, Snowflake must store the file inside the internal stage.
+
+**How to do it:**
+
+1. Go to Snowflake Web UI
+2. On the left menu, under **Work with data section**
+3. Click on **Ingestion button** then click on **Add Data**
+4. Select **Load files into a stage**
+5. A popup window will appear:
+    - Click **Browse**
+    - Select the local CSV file from your computer
+    - Click **Upload**
+6. Now in the same popup:
+    - Select **Database which you created in step 3 (DEMO_DATABASE)**
+    - Select **Schema which you created in step 4 (DEMO_SCHEMA)**
+    - Select **Stage which you created in step 5 (DEMO_STAGE)**
+7. Click **Load**
+   
+**Note:** Your file is now stored inside Snowflake.
+
+
+# ⭐ Step 9 — Load Data FROM STAGE INTO TABLE (MANUALLY USING SNOWFLAKE UI)
+
+This step loads data from the uploaded file into the target table.
+
+**Why this step is required?**
+
+Staged files are not queryable — you must load them into a Snowflake table to use them.
+
+**How to do it:**
+
+1. Again Click on **Ingestion button** then click on **Add Data**
+2. Select **Load files into a table**
+3. A popup window appears
+4. Choose: **Add from stage**
+5. Another popup opens:
+     - Select **Database which you created in step 3 (DEMO_DATABASE)**
+     - Select **Schema which you created in step 4 (DEMO_SCHEMA)**
+     - A list of stages appear → choose **DEMO_STAGE which is created in step 5**
+     - Inside the stage you view all uploaded files, select the file you want to **uploaded**
+     - Click **Add**
+6. Now in the main popup:
+     - Select **Database which you created in step 3 (DEMO_DATABASE)**
+     - Select **Schema which you created in step 4 (DEMO_SCHEMA)**
+     - Select target table **Table which you created in step 7 (CUSTOMER_CVS_FF)** 
+7. Click **Next**
+8. Review settings → If errors appear, fix them
+9. Click **Load**
+
+**Note:** Snowflake reads the staged file and inserts rows into the table.
+
+
+# Step 10 — Validate Loaded Data
+Check if data is successfully loaded.
+```sql
+SELECT COUNT(*) FROM DEMO_DATABASE.DEMO_SCHEMA.CUSTOMER_CVS_FF;
+```
+```sql
+SELECT * FROM DEMO_DATABASE.DEMO_SCHEMA.CUSTOMER_CVS_FF LIMIT 10;
+```
+**Note:** Good practice: always validate row counts and sample records.
+
+# Step 11 — Check Duplicate Records
+Because Snowflake does not enforce primary keys, duplicates can exist.
+```sql
+SELECT  
+  CUST_ID,  
+  COUNT(*) AS TOTAL_COUNT  
+FROM DEMO_DATABASE.DEMO_SCHEMA.CUSTOMER_CVS_FF  
+GROUP BY ALL  
+HAVING COUNT(*) > 1  
+ORDER BY TOTAL_COUNT DESC;
+```
+**Note:** This helps you identify duplicate customer IDs and row counts.
