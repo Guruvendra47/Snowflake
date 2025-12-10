@@ -79,7 +79,7 @@ DATE_OF_TXN DATE
 **Note:** Primary keys are optional in Snowflake and are not enforced during loading. Duplicate values may exist unless you check them manually.
 
 
-# ⭐ Step 8: Load File INTO STAGE (MANUALLY USING SNOWFLAKE UI)
+# Step 8: Load File INTO STAGE (MANUALLY USING SNOWFLAKE UI)
 
 This step uploads your CSV file into the internal stage.
 
@@ -106,7 +106,7 @@ Before loading into a table, Snowflake must store the file inside the internal s
 **Note:** Your file is now stored inside Snowflake.
 
 
-# ⭐ Step 9: Load Data FROM STAGE INTO TABLE (MANUALLY USING SNOWFLAKE UI)
+# Step 9: Load Data FROM STAGE INTO TABLE (MANUALLY USING SNOWFLAKE UI)
 
 This step loads data from the uploaded file into the target table.
 
@@ -137,7 +137,7 @@ Staged files are not queryable — you must load them into a Snowflake table to 
 **Note:** Snowflake reads the staged file and inserts rows into the table.
 
 
-# Step 10: Validate Loaded Data
+# ⭐ Step 10: Validate Loaded Data
 Check if data is successfully loaded.
 ```sql
 SELECT COUNT(*) FROM DEMO_DATABASE.DEMO_SCHEMA.CUSTOMER_CVS_FF;
@@ -147,7 +147,7 @@ SELECT * FROM DEMO_DATABASE.DEMO_SCHEMA.CUSTOMER_CVS_FF LIMIT 10;
 ```
 **Note:** Good practice: always validate row counts and sample records.
 
-# Step 11: Check Duplicate Records
+# ⭐ Step 11: Check Duplicate Records
 Because Snowflake does not enforce primary keys, duplicates can exist.
 ```sql
 SELECT  
