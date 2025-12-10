@@ -142,10 +142,11 @@ Check if data is successfully loaded.
 ```sql
 SELECT COUNT(*) FROM DEMO_DATABASE.DEMO_SCHEMA.CUSTOMER_CVS_FF;
 ```
+**(Or)**
 ```sql
-SELECT * FROM DEMO_DATABASE.DEMO_SCHEMA.CUSTOMER_CVS_FF LIMIT 10;
+SELECT * FROM DEMO_DATABASE.DEMO_SCHEMA.CUSTOMER_CVS_FF;
 ```
-**Note:** Good practice: always validate row counts and sample records.
+**Note:** Good practice: always validate row counts and data.
 
 # ⭐ Step 11: Check Duplicate Records
 Because Snowflake does not enforce primary keys, duplicates can exist.
@@ -159,3 +160,13 @@ HAVING COUNT(*) > 1
 ORDER BY TOTAL_COUNT DESC;
 ```
 **Note:** This helps you identify duplicate customer IDs and row counts.
+
+# ⭐ Step 12: Show all tables in the schema
+Because Snowflake does not enforce primary keys, duplicates can exist.
+```sql
+SHOW TABLES IN SCHEMA DEMO_DATABASE.DEMO_SCHEMA;
+```
+**Note:** Use this to confirm that your target table (and any other tables) exist in the correct schema.
+
+***************************************************************************************************************************
+
