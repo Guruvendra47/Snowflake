@@ -37,6 +37,9 @@ This guide is a **step-by-step** procedure that follows the PDF you uploaded. Im
 1. Login to AWS Console → Services → S3 → Create bucket.
 2. Use a lowercase bucket name (example: `retail-snowflake-aws`).
 
+![Image](file:///C:\Users\guruv\Downloads\extracted_pdf_images\page1_img1.png)
+
+
 ![S3 Console - create bucket](sandbox:/mnt/data/extracted_pdf_images/page1_img1.png)
 
 ---
