@@ -1,199 +1,64 @@
-# ❄️ Snowflake + AWS S3 + Snowpipe (Auto Ingest) – End-to-End Guide
+# ❄️ Continuous Data Loading — AWS S3 → Snowflake (Step-by-step)
 
-All required SQL scripts and data files have been uploaded to the GitHub repository under the "Data" and "SQL" folders for your reference.
+This guide is a **step-by-step** procedure that follows the PDF you uploaded. Images from the PDF are embedded under each relevant step to make the flow visual and easy to follow.
 
----
-
-## Step 1: Use a powerful role
-
-A role with full privileges is required to create warehouses, databases, schemas, stages, and pipes.
-
-```sql
-USE ROLE ACCOUNTADMIN;
-```
-
-**Why?**
-This ensures you won’t face access/privilege issues while creating Snowflake objects for the project.
+> Source screenshots and examples come from the original PDF (extracted images). See the end for a download link to all images.
 
 ---
 
-## Step 2: Create and select Warehouse
+## Table of contents
 
-A warehouse is the compute engine that performs loading and querying.
-
-```sql
-CREATE WAREHOUSE IF NOT EXISTS DEMO_WAREHOUSE;
-USE WAREHOUSE DEMO_WAREHOUSE;
-```
-
-**Note:** **Data loading will not work** unless a warehouse is active.
-
----
-
-## Step 3: Create and select Project Database
-
-A database is a logical container for schemas, tables, stages, and file formats.
-
-```sql
--- Create the Database
-CREATE DATABASE IF NOT EXISTS RETAILS_DATABASE;
-USE RETAILS_DATABASE;
-```
-
-> Think of a database like a **project folder** for all retail data.
+1. [Overview & prerequisites](#overview--prerequisites)
+2. [Step 1 — Create S3 bucket](#step-1---create-s3-bucket)
+3. [Step 2 — Create folder(s) in the bucket](#step-2---create-folders-in-the-bucket)
+4. [Step 3 — Create IAM policy for the bucket](#step-3---create-iam-policy-for-the-bucket)
+5. [Step 4 — Create IAM role and attach policy](#step-4---create-iam-role-and-attach-policy)
+6. [Step 5 — Create Snowflake storage integration](#step-5---create-snowflake-storage-integration)
+7. [Step 6 — Update role trust relationship with Snowflake values](#step-6---update-role-trust-relationship-with-snowflake-values)
+8. [Step 7 — Create file format & external stage in Snowflake](#step-7---create-file-format--external-stage-in-snowflake)
+9. [Step 8 — Create Snowpipe (AUTO_INGEST) per folder](#step-8---create-snowpipe-auto_ingest-per-folder)
+10. [Step 9 — Configure S3 Event Notification (SQS) → Snowpipe](#step-9---configure-s3-event-notification-sqs--snowpipe)
+11. [Validation & monitoring commands](#validation--monitoring-commands)
+12. [Images archive](#images-archive)
 
 ---
 
-## Step 4: Create and select Schema
+## Overview & prerequisites
 
-Schemas help you organize Snowflake objects inside a database.
+* Goal: Auto-ingest CSV files dropped into S3 folders into Snowflake tables using **Snowpipe**.
+* You need: AWS account (S3, IAM, SQS), Snowflake account with `ACCOUNTADMIN` privileges.
 
-```sql
--- Create Schema
-CREATE SCHEMA IF NOT EXISTS RETAILS_SCHEMA;
-USE SCHEMA RETAILS_SCHEMA;
-```
-
-> Example: `RETAILS_SCHEMA` will contain your **tables, stages, file formats, pipes**, etc.
+> Keep the Snowflake `DESC INTEGRATION` output handy — it provides `STORAGE_AWS_IAM_USER_ARN` and `STORAGE_AWS_EXTERNAL_ID` which you will copy into AWS role trust policy.
 
 ---
 
-## Step 5: Create Raw Tables in Snowflake
+## Step 1 - Create S3 bucket
 
-These tables will store the raw data coming from S3 via Snowpipe.
+1. Login to AWS Console → Services → S3 → Create bucket.
+2. Use a lowercase bucket name (example: `retail-snowflake-aws`).
 
-```sql
--- Create DEMOGRAPHIC Table
-CREATE TABLE IF NOT EXISTS DEMOGRAPHIC_RAW (
-  AGE_DESC               CHAR(20),
-  MARITAL_STATUS_CODE    CHAR(5),
-  INCOME_DESC            VARCHAR(40),
-  HOMEOWNER_DESC         VARCHAR(40),
-  HH_COMP_DESC           VARCHAR(50),
-  HOUSEHOLD_SIZE_DESC    VARCHAR(50),
-  KID_CATEGORY_DESC      VARCHAR(40),
-  household_key          INT PRIMARY KEY
-);
+![Image](file:///C:\Users\guruv\Downloads\extracted_pdf_images\page1_img1.png)
 
--- Create CAMPAIGN_DESC Table
-CREATE OR REPLACE TABLE CAMPAIGN_DESC_RAW (
-  DESCRIPTION CHAR(10),
-  CAMPAIGN    INT,
-  START_DAY   INT,
-  END_DAY     INT,
-  PRIMARY KEY (DESCRIPTION),
-  UNIQUE (CAMPAIGN)
-);
 
--- Create CAMPAIGN Table
-CREATE OR REPLACE TABLE CAMPAIGN_RAW (
-  DESCRIPTION   CHAR(10),
-  household_key INT,
-  CAMPAIGN      INT,
-  FOREIGN KEY (DESCRIPTION)   REFERENCES CAMPAIGN_DESC_RAW(DESCRIPTION),
-  FOREIGN KEY (CAMPAIGN)      REFERENCES CAMPAIGN_DESC_RAW(CAMPAIGN),
-  FOREIGN KEY (household_key) REFERENCES DEMOGRAPHIC_RAW(household_key)
-);
-
--- Create PRODUCT Table
-CREATE OR REPLACE TABLE PRODUCT_RAW (
-  PRODUCT_ID           INT PRIMARY KEY,
-  MANUFACTURER         INT,
-  DEPARTMENT           VARCHAR(50),
-  BRAND                VARCHAR(30),
-  COMMODITY_DESC       VARCHAR(65),
-  SUB_COMMODITY_DESC   VARCHAR(65),
-  CURR_SIZE_OF_PRODUCT VARCHAR(15)
-);
-
--- Create COUPON Table
-CREATE OR REPLACE TABLE COUPON_RAW (
-  COUPON_UPC INT,
-  PRODUCT_ID INT,
-  CAMPAIGN   INT,
-  FOREIGN KEY (PRODUCT_ID) REFERENCES PRODUCT_RAW(PRODUCT_ID),
-  FOREIGN KEY (CAMPAIGN)   REFERENCES CAMPAIGN_DESC_RAW(CAMPAIGN)
-);
-
--- Create COUPON_REDEMPT Table
-CREATE OR REPLACE TABLE COUPON_REDEMPT_RAW (
-  household_key INT,
-  DAY           INT,
-  COUPON_UPC    INT,
-  CAMPAIGN      INT,
-  FOREIGN KEY (household_key) REFERENCES DEMOGRAPHIC_RAW(household_key),
-  FOREIGN KEY (CAMPAIGN)      REFERENCES CAMPAIGN_DESC_RAW(CAMPAIGN)
-);
-
--- Create TRANSACTION Table
-CREATE OR REPLACE TABLE TRANSACTION_RAW (
-  household_key      INT,
-  BASKET_ID          INT,
-  DAY                INT,
-  PRODUCT_ID         INT,
-  QUANTITY           INT,
-  SALES_VALUE        FLOAT,
-  STORE_ID           INT,
-  RETAIL_DISC        FLOAT,
-  TRANS_TIME         INT,
-  WEEK_NO            INT,
-  COUPON_DISC        INT,
-  COUPON_MATCH_DISC  INT,
-  FOREIGN KEY (PRODUCT_ID)   REFERENCES PRODUCT_RAW(PRODUCT_ID),
-  FOREIGN KEY (household_key) REFERENCES DEMOGRAPHIC_RAW(household_key)
-);
-
--- Check all tables
-SHOW TABLES IN RETAILS_DATABASE.RETAILS_SCHEMA;
-```
-
-> Note: Foreign keys in Snowflake are **not enforced** by default; they are mainly for documentation.
+![S3 Console - create bucket](sandbox:/mnt/data/extracted_pdf_images/page1_img1.png)
 
 ---
 
-## Step 6: Create S3 Bucket and Folders
+## Step 2 - Create folders inside the bucket
 
-Now move to **AWS Console**.
+1. Open your bucket → Create folder.
+2. Create one folder per data feed (case-sensitive). Example folders from the PDF:
 
-1. Login to AWS (or create an account).
+   * `snowpipe` (or `DEMOGRAPHIC`, `TRANSACTION`, etc.)
 
-2. Click on your **username (top-right)** → **Security credentials** to later create access keys (already needed for other integrations).
-
-3. In the AWS search bar, type **S3** and open the S3 service.
-
-4. Click **Create bucket**.
-
-5. Enter a bucket name in lowercase, for example:
-
-   `retail-snowflake-aws`
-
-6. Choose region → Click **Create bucket**.
-
-Now create folders inside the bucket to match Snowflake tables:
-
-1. Click your bucket: `retail-snowflake-aws`
-2. Click **Create folder** and create each folder with **exact names** (case sensitive):
-
-   * `CAMPAIGN_DESC`
-   * `CAMPAIGN`
-   * `COUPON`
-   * `COUPON_REDEMPT`
-   * `DEMOGRAPHIC`
-   * `PRODUCT`
-   * `TRANSACTION`
-
-> Important: Folder names are **case sensitive**. They must match exactly what you will use in Snowpipe `FROM '@RETAIL/<FOLDER>/'`.
+![Create folder in bucket](sandbox:/mnt/data/extracted_pdf_images/page2_img1.png)
 
 ---
 
-## Step 7: Create IAM Policy for S3 Access
+## Step 3 - Create IAM policy for the bucket
 
-This policy gives Snowflake permission to read/write from your S3 bucket.
-
-1. In AWS search bar, type **IAM** → open IAM.
-2. On left menu, click **Policies** → **Create policy**.
-3. Go to the **JSON** tab.
-4. Delete everything and paste your policy (adjust bucket name):
+1. AWS Console → IAM → Policies → Create policy → JSON tab.
+2. Paste the policy JSON (replace the bucket name):
 
 ```json
 {
@@ -219,80 +84,76 @@ This policy gives Snowflake permission to read/write from your S3 bucket.
 }
 ```
 
-> Replace `retail-snowflake-aws` with **your** bucket name. The `"/*"` after bucket ARN means the policy applies to **all objects** inside the bucket.
-
-5. Click **Next**.
-6. Give a **Policy Name** (e.g., `retail_snowflake_s3_policy`).
-7. Click **Create policy**.
+![IAM - Create policy JSON tab](sandbox:/mnt/data/extracted_pdf_images/page3_img1.png)
 
 ---
 
-## Step 8: Create IAM Role and Attach Policy
+## Step 4 - Create IAM role and attach the policy
 
-We create a role that Snowflake will assume to access S3.
+1. IAM → Roles → Create role → Trusted entity type: **AWS account**.
+2. (Optional) Check **Require external ID** and enter a placeholder (we update this later).
+3. Attach the policy created in Step 3 and create the role (e.g., `retail_role`).
+4. Copy the **Role ARN** — you will use it in Snowflake.
 
-1. In IAM, go to **Roles** → **Create role**.
-2. Under **Trusted entity type**, select **AWS account**.
-3. Click **Next**.
-4. In **Permissions**, search and attach the policy you just created (`retail_snowflake_s3_policy`).
-5. Click **Next**.
-6. Give a **Role name** (e.g., `retail_role`) and description
-   *Example: “Role for Snowflake Retail Project S3 access”*
-7. Click **Create role**.
-8. Open the role you just created and copy its **Role ARN**, e.g.:
-
-```
-arn:aws:iam::954976291800:role/retail_role
-```
-
-> This ARN will be used in the Snowflake storage integration.
+![Create role and attach policy](sandbox:/mnt/data/extracted_pdf_images/page5_img1.png)
 
 ---
 
-## Step 9: Get S3 Bucket ARN
+## Step 5 - Create Snowflake storage integration
 
-1. Go to **S3** → open your bucket `retail-snowflake-aws`.
-2. Click on the **Properties** tab.
-3. Find and copy the **Bucket ARN**, e.g.:
-
-```
-arn:aws:s3:::retail-snowflake-aws
-```
-
-You now have:
-
-* **Role ARN** (IAM role)
-* **Bucket ARN** (S3 bucket)
-
----
-
-## Step 10: Create Snowflake Storage Integration (S3)
-
-Use the two ARNs in Snowflake to define the integration.
+In Snowflake (use `ACCOUNTADMIN`):
 
 ```sql
--- Create Storage Integration
-CREATE OR REPLACE STORAGE INTEGRATION s3_int
+CREATE OR REPLACE STORAGE INTEGRATION snowpipe_integration
   TYPE = EXTERNAL_STAGE
   STORAGE_PROVIDER = S3
+  STORAGE_AWS_ROLE_ARN = 'arn:aws:iam::YOUR_ACCOUNT_ID:role/retail_role'
   ENABLED = TRUE
-  STORAGE_AWS_ROLE_ARN = 'arn:aws:iam::954976291800:role/retail_role'
   STORAGE_ALLOWED_LOCATIONS = ('s3://retail-snowflake-aws/');
 
--- Describe integration to get details like STORAGE_AWS_IAM_USER_ARN
-DESC INTEGRATION s3_int;
+-- Get integration metadata
+DESC INTEGRATION snowpipe_integration;
 ```
 
-> Note: `STORAGE_ALLOWED_LOCATIONS` restricts which S3 paths this integration can access.
+The `DESC INTEGRATION` result returns two important values you will copy: **`STORAGE_AWS_IAM_USER_ARN`** and **`STORAGE_AWS_EXTERNAL_ID`**.
+
+![Storage integration example in Snowflake](sandbox:/mnt/data/extracted_pdf_images/page8_img1.png)
 
 ---
 
-## Step 11: Create CSV File Format in Snowflake
+## Step 6 - Update role trust relationship with Snowflake values
 
-This defines how Snowflake reads your CSV files.
+1. In AWS Console → IAM → Roles → open your role (e.g., `retail_role`).
+2. Click **Trust relationships** → **Edit trust policy**.
+3. Replace the `Principal` value with the `STORAGE_AWS_IAM_USER_ARN` and set the `sts:ExternalId` to the `STORAGE_AWS_EXTERNAL_ID` from `DESC INTEGRATION`.
+
+*Sample trust policy structure (fill with your actual strings):*
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": { "AWS": "arn:aws:iam::012345678901:user/snowflake_user" },
+      "Action": "sts:AssumeRole",
+      "Condition": {
+        "StringEquals": { "sts:ExternalId": "<STORAGE_AWS_EXTERNAL_ID>" }
+      }
+    }
+  ]
+}
+```
+
+![Edit trust relationship in IAM role](sandbox:/mnt/data/extracted_pdf_images/page4_img1.png)
+
+---
+
+## Step 7 - Create file format & external stage in Snowflake
+
+Create a CSV file format:
 
 ```sql
--- Create file format
 CREATE FILE FORMAT IF NOT EXISTS CSV_FORMAT
   TYPE = 'CSV'
   COMPRESSION = 'AUTO'
@@ -303,267 +164,100 @@ CREATE FILE FORMAT IF NOT EXISTS CSV_FORMAT
   ERROR_ON_COLUMN_COUNT_MISMATCH = TRUE;
 ```
 
-> This ensures Snowflake correctly handles **headers, delimiters, line breaks, and column counts**.
+Create the external stage pointing to your bucket/folder:
+
+```sql
+CREATE OR REPLACE STAGE patient_snowpipe_stage
+  STORAGE_INTEGRATION = snowpipe_integration
+  URL = 's3://patientsnowpipebucket/snowpipe'
+  FILE_FORMAT = (FORMAT_NAME = 'CSV_FORMAT');
+
+LIST @patient_snowpipe_stage;
+```
+
+![Create file format UI example](sandbox:/mnt/data/extracted_pdf_images/page10_img1.png)
 
 ---
 
-## Step 12: Create External Stage for S3 Bucket
+## Step 8 - Create Snowpipe(s) with AUTO_INGEST = TRUE
 
-This stage points to your S3 bucket via the storage integration.
-
-```sql
--- Create stage
-CREATE OR REPLACE STAGE RETAIL
-  URL = 's3://retail-snowflake-aws'
-  FILE_FORMAT = CSV_FORMAT
-  STORAGE_INTEGRATION = s3_int;
-```
-
-> `RETAIL` is now your external stage pointing to S3.
-
----
-
-## Step 13: Test Stage Access with LIST
+Create a pipe for the folder that should auto-load into a Snowflake table:
 
 ```sql
-LIST @RETAIL;
-```
+CREATE OR REPLACE PIPE patient_snowpipe
+  AUTO_INGEST = TRUE
+AS
+COPY INTO tab_patient
+FROM @patient_snowpipe_stage
+FILE_FORMAT = (FORMAT_NAME = 'CSV_FORMAT');
 
-* If it works, you will see files (when you upload them).
-* If you get an error related to access / trust policy, fix it in the next step.
-
----
-
-## Step 14: Fix Trust Relationship (if access error)
-
-If `LIST @RETAIL;` fails with a trust/permission error:
-
-1. In Snowflake, run:
-
-```sql
-DESC INTEGRATION s3_int;
-```
-
-2. Copy the value of `STORAGE_AWS_IAM_USER_ARN` (looks like):
-
-```
-arn:aws:iam::013001369188:user/xogc1000-s
-```
-
-3. Go to AWS → **IAM → Roles** → open your role `retail_role`.
-4. Click the **Trust relationships** tab → **Edit trust policy**.
-5. Replace the existing `AWS` principal (like `"arn:aws:iam::954976291800:root"`) with the `STORAGE_AWS_IAM_USER_ARN` from Snowflake.
-
-Example (simplified):
-
-```json
-"Principal": {
-  "AWS": "arn:aws:iam::013001369188:user/xogc1000-s"
-}
-```
-
-6. Click **Update policy**.
-
-Then re-run:
-
-```sql
-LIST @RETAIL;
-```
-
-> Now the stage should list files correctly once they exist in S3.
-
----
-
-## Step 15: Verify All Stages
-
-```sql
-SHOW STAGES;
-```
-
-> Use this to confirm your `RETAIL` stage exists and uses `s3_int`.
-
----
-
-## Step 16: Create Snowpipes for Each Folder (Auto Ingest)
-
-Each pipe listens to a specific folder in S3 and loads the corresponding table.
-
-```sql
--- DEMOGRAPHIC
-CREATE PIPE IF NOT EXISTS RETAIL_SNOWPIPE_DEMOGRAPHIC AUTO_INGEST = TRUE AS
-COPY INTO RETAILS_DATABASE.RETAILS_SCHEMA.DEMOGRAPHIC_RAW
-FROM '@RETAIL/DEMOGRAPHIC/'
-FILE_FORMAT = CSV_FORMAT;
-
--- CAMPAIGN_DESC
-CREATE PIPE IF NOT EXISTS RETAIL_SNOWPIPE_CAMPAIGN_DESC AUTO_INGEST = TRUE AS
-COPY INTO RETAILS_DATABASE.RETAILS_SCHEMA.CAMPAIGN_DESC_RAW
-FROM '@RETAIL/CAMPAIGN_DESC/'
-FILE_FORMAT = CSV_FORMAT;
-
--- CAMPAIGN
-CREATE PIPE IF NOT EXISTS RETAIL_SNOWPIPE_CAMPAIGN AUTO_INGEST = TRUE AS
-COPY INTO RETAILS_DATABASE.RETAILS_SCHEMA.CAMPAIGN_RAW
-FROM '@RETAIL/CAMPAIGN/'
-FILE_FORMAT = CSV_FORMAT;
-
--- PRODUCT
-CREATE PIPE IF NOT EXISTS RETAIL_SNOWPIPE_PRODUCT AUTO_INGEST = TRUE AS
-COPY INTO RETAILS_DATABASE.RETAILS_SCHEMA.PRODUCT_RAW
-FROM '@RETAIL/PRODUCT/'
-FILE_FORMAT = CSV_FORMAT;
-
--- COUPON
-CREATE PIPE IF NOT EXISTS RETAIL_SNOWPIPE_COUPON AUTO_INGEST = TRUE AS
-COPY INTO RETAILS_DATABASE.RETAILS_SCHEMA.COUPON_RAW
-FROM '@RETAIL/COUPON/'
-FILE_FORMAT = CSV_FORMAT;
-
--- COUPON_REDEMPT
-CREATE PIPE IF NOT EXISTS RETAIL_SNOWPIPE_COUPON_REDEMPT AUTO_INGEST = TRUE AS
-COPY INTO RETAILS_DATABASE.RETAILS_SCHEMA.COUPON_REDEMPT_RAW
-FROM '@RETAIL/COUPON_REDEMPT/'
-FILE_FORMAT = CSV_FORMAT;
-
--- TRANSACTION
-CREATE PIPE IF NOT EXISTS RETAIL_SNOWPIPE_TRANSACTION AUTO_INGEST = TRUE AS
-COPY INTO RETAILS_DATABASE.RETAILS_SCHEMA.TRANSACTION_RAW
-FROM '@RETAIL/TRANSACTION/'
-FILE_FORMAT = CSV_FORMAT;
-
--- Verify
 SHOW PIPES;
 ```
 
-> `AUTO_INGEST = TRUE` enables **event-based loading** when S3 sends notifications.
+Copy the `notification_channel` value (SQS ARN) from `SHOW PIPES` or from the Pipes UI — you will use it as the destination for S3 notifications.
+
+![Create pipe - Snowpipe example](sandbox:/mnt/data/extracted_pdf_images/page11_img1.png)
 
 ---
 
-## Step 17: Get Snowpipe SQS ARN (Notification Channel)
+## Step 9 - Configure S3 Event Notification → SQS → Snowpipe
 
-From:
+1. Go to the S3 bucket → **Properties** → **Event notifications** → **Create event notification**.
+2. Name it (e.g., `snowpipe_event`).
+3. Event types: **All object create events**.
+4. Destination: **SQS queue** → **Enter SQS queue ARN** → paste the `notification_channel` ARN from Snowflake.
+5. Save.
+
+![S3 Event notification UI example](sandbox:/mnt/data/extracted_pdf_images/page12_img1.png)
+
+Now, files uploaded to the configured folder will trigger S3 → SQS → Snowpipe and Snowpipe will auto-load the files into the target table.
+
+---
+
+## Validation & monitoring commands
+
+* Force Snowpipe to scan for existing files:
 
 ```sql
-SHOW PIPES;
+ALTER PIPE patient_snowpipe REFRESH;
 ```
 
-* Find your pipe (e.g., `RETAIL_SNOWPIPE_TRANSACTION`).
-* Copy the value of `notification_channel`, which looks like:
-
-```
-arn:aws:sqs:us-east-1:013001369188:sf-snowpipe-AIDAQGBXREZSFQESYYH57-veE23Zx0sW1EbAf8RLoWQw
-```
-
-You will use this in the S3 event notification.
-
----
-
-## Step 18: Configure S3 Event Notification for Snowpipe
-
-This allows S3 to notify Snowpipe when new files are uploaded.
-
-1. Go to **S3 → your bucket** `retail-snowflake-aws`.
-2. Click **Properties** tab.
-3. Scroll down to **Event notifications**.
-4. Click **Create event notification**.
-5. Give it a name (e.g., `aws_s3_retail_event`).
-6. Under **Event types**, select:
-
-   * **All object create events** (or whatever create events you want).
-7. Under **Destination**, select **SQS queue**.
-8. Under **Specify SQS queue**, choose **Enter SQS queue ARN** and paste the ARN from `SHOW PIPES` (notification_channel).
-9. Save changes.
-
-> Now, whenever a file is uploaded to the bucket/folders, an event will go to Snowpipe’s SQS and trigger loading.
-
----
-
-## Step 19: Manually Refresh Pipes (if needed)
-
-If files already exist in S3 before Snowpipe setup, or you want to force re-check:
+* Check row counts in tables:
 
 ```sql
-----------------------------------------------------------PIPEREFRESH-----------------------------------------------------------------
-
-ALTER PIPE RETAIL_SNOWPIPE_DEMOGRAPHIC       REFRESH;
-ALTER PIPE RETAIL_SNOWPIPE_CAMPAIGN_DESC     REFRESH;
-ALTER PIPE RETAIL_SNOWPIPE_CAMPAIGN          REFRESH;
-ALTER PIPE RETAIL_SNOWPIPE_PRODUCT           REFRESH;
-ALTER PIPE RETAIL_SNOWPIPE_COUPON            REFRESH;
-ALTER PIPE RETAIL_SNOWPIPE_COUPON_REDEMPT    REFRESH;
-ALTER PIPE RETAIL_SNOWPIPE_TRANSACTION       REFRESH;
+SELECT COUNT(*) FROM my_schema.demographic_raw;
 ```
 
-> This tells Snowpipe to scan the S3 location and load any files that haven’t been loaded yet.
-
----
-
-## Step 20: Validate Row Counts in Each Table
-
-After files are uploaded and Snowpipe runs, check counts:
+* Check Snowpipe status and load history:
 
 ```sql
-SELECT COUNT(*) FROM DEMOGRAPHIC_RAW;
-SELECT COUNT(*) FROM CAMPAIGN_DESC_RAW;
-SELECT COUNT(*) FROM CAMPAIGN_RAW;
-SELECT COUNT(*) FROM PRODUCT_RAW;
-SELECT COUNT(*) FROM COUPON_RAW;
-SELECT COUNT(*) FROM COUPON_REDEMPT_RAW;
-SELECT COUNT(*) FROM TRANSACTION_RAW;
-```
+SELECT SYSTEM$PIPE_STATUS('patient_snowpipe');
 
-> Good practice: verify row counts against source or expectations.
-
----
-
-## Step 21: Check Snowpipe Status & Load History
-
-These commands help debug loading or verify what was loaded.
-
-```sql
---------------------------------------------------------Snowpipe-Status-----------------------------------------------------------------
-
--- Check status of a specific pipe
-SELECT SYSTEM$PIPE_STATUS('RETAIL_SNOWPIPE_TRANSACTION');
-
--- Check recent copy history for a specific table (last 1 hour example)
 SELECT *
 FROM TABLE(
   INFORMATION_SCHEMA.COPY_HISTORY(
-    TABLE_NAME => 'TRANSACTION_RAW',
+    TABLE_NAME => 'tab_patient',
     START_TIME => DATEADD(hours, -1, CURRENT_TIMESTAMP())
   )
 );
 ```
 
-> Use different table names and time windows as needed.
+![ALT_TEXT](images/screenshot1.png)
+
+![Snowpipe status & copy history example](sandbox:/mnt/data/extracted_pdf_images/page1_img1.png)
 
 ---
 
-## Step 22: View Loaded Data
+## Images archive
 
-Finally, view the actual data:
+I extracted the PDF screenshots and saved them for you. Download the full archive here:
 
-```sql
-SELECT * FROM DEMOGRAPHIC_RAW;
-SELECT * FROM CAMPAIGN_DESC_RAW;
-SELECT * FROM CAMPAIGN_RAW;
-SELECT * FROM PRODUCT_RAW;
-SELECT * FROM COUPON_RAW;
-SELECT * FROM COUPON_REDEMPT_RAW;
-SELECT * FROM TRANSACTION_RAW;
-```
+[Download extracted images (ZIP)](sandbox:/mnt/data/extracted_pdf_images.zip)
 
 ---
 
-## Step 23: Show All Tables in the Schema
+If you want any of these changes:
 
-To confirm all raw tables exist and are in the correct schema:
-
-```sql
-SHOW TABLES IN SCHEMA RETAILS_DATABASE.RETAILS_SCHEMA;
-```
-
----
-
-If you want, I can next convert this into a GitHub-ready `.md` file with a title, TOC, and separate SQL files attached, or make a condensed quick-check checklist. Let me know which format you prefer.
+* Move this guide into a GitHub-ready `.md` repo (I can split SQL into separate `.sql` files).
+* Produce a one-page printable checklist.
+* Replace any image with a different page image from the extracted set.
