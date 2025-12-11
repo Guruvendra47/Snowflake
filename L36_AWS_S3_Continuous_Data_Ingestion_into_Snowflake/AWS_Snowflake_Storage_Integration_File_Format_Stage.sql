@@ -24,12 +24,28 @@ ERROR_ON_COLUMN_COUNT_MISMATCH = TRUE;
 
 ----------------------------------------------------------------------Stage-------------------------------------------------------------
 
--- Create stage
-CREATE STAGE IF NOT EXISTS RETAIL
+-- Create stage with storage integration
+CREATE STAGE IF NOT EXISTS RETAIL -- Stage Name you can give anything
 URL ='s3://retail-snowflake-aws'
+-- credentials=(aws_key_id='****************'aws_secret_key='*******************')   -- (we Do not execute this if you are creating via storage Integration)
 file_format = CSV_FORMAT
 storage_integration = s3_int;
+
+----(Or)----
+
+-- Create stage with Credentials
+CREATE STAGE IF NOT EXISTS RETAIL -- Stage Name you can give anything
+URL ='s3://retail-snowflake-aws'
+credentials = (aws_key_id='AKIA54WIFZPMH2WM2QNB'aws_secret_key='BOdiYxf63VzwzGiUOIstkyOV2Zqmfwxd8lHvNn')   -- Replace with your AWS Access Key
+file_format = CSV_FORMAT
+-- storage_integration = s3_int; -- (Do not execute this if you are creating via access key)
 
 LIST @RETAIL;
 
 SHOW STAGES;
+
+
+
+
+
+
