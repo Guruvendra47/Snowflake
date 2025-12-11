@@ -2,25 +2,6 @@
 
 This guide is a **step-by-step** procedure that follows the PDF you uploaded. Images from the PDF are embedded under each relevant step to make the flow visual and easy to follow.
 
-> Source screenshots and examples come from the original PDF (extracted images). See the end for a download link to all images.
-
----
-
-## Table of contents
-
-1. [Overview & prerequisites](#overview--prerequisites)
-2. [Step 1 — Create S3 bucket](#step-1---create-s3-bucket)
-3. [Step 2 — Create folder(s) in the bucket](#step-2---create-folders-in-the-bucket)
-4. [Step 3 — Create IAM policy for the bucket](#step-3---create-iam-policy-for-the-bucket)
-5. [Step 4 — Create IAM role and attach policy](#step-4---create-iam-role-and-attach-policy)
-6. [Step 5 — Create Snowflake storage integration](#step-5---create-snowflake-storage-integration)
-7. [Step 6 — Update role trust relationship with Snowflake values](#step-6---update-role-trust-relationship-with-snowflake-values)
-8. [Step 7 — Create file format & external stage in Snowflake](#step-7---create-file-format--external-stage-in-snowflake)
-9. [Step 8 — Create Snowpipe (AUTO_INGEST) per folder](#step-8---create-snowpipe-auto_ingest-per-folder)
-10. [Step 9 — Configure S3 Event Notification (SQS) → Snowpipe](#step-9---configure-s3-event-notification-sqs--snowpipe)
-11. [Validation & monitoring commands](#validation--monitoring-commands)
-12. [Images archive](#images-archive)
-
 ---
 
 ## Overview & prerequisites
@@ -37,12 +18,7 @@ This guide is a **step-by-step** procedure that follows the PDF you uploaded. Im
 1. Login to AWS Console → Services → S3 → Create bucket.
 2. Use a lowercase bucket name (example: `retail-snowflake-aws`).
 
-![Image](file:///C:\Users\guruv\Downloads\extracted_pdf_images\page1_img1.png)
 
-
-![S3 Console - create bucket](sandbox:/mnt/data/extracted_pdf_images/page1_img1.png)
-
----
 
 ## Step 2 - Create folders inside the bucket
 
@@ -51,9 +27,8 @@ This guide is a **step-by-step** procedure that follows the PDF you uploaded. Im
 
    * `snowpipe` (or `DEMOGRAPHIC`, `TRANSACTION`, etc.)
 
-![Create folder in bucket](sandbox:/mnt/data/extracted_pdf_images/page2_img1.png)
 
----
+
 
 ## Step 3 - Create IAM policy for the bucket
 
@@ -84,9 +59,8 @@ This guide is a **step-by-step** procedure that follows the PDF you uploaded. Im
 }
 ```
 
-![IAM - Create policy JSON tab](sandbox:/mnt/data/extracted_pdf_images/page3_img1.png)
 
----
+
 
 ## Step 4 - Create IAM role and attach the policy
 
@@ -95,9 +69,8 @@ This guide is a **step-by-step** procedure that follows the PDF you uploaded. Im
 3. Attach the policy created in Step 3 and create the role (e.g., `retail_role`).
 4. Copy the **Role ARN** — you will use it in Snowflake.
 
-![Create role and attach policy](sandbox:/mnt/data/extracted_pdf_images/page5_img1.png)
 
----
+
 
 ## Step 5 - Create Snowflake storage integration
 
@@ -117,9 +90,9 @@ DESC INTEGRATION snowpipe_integration;
 
 The `DESC INTEGRATION` result returns two important values you will copy: **`STORAGE_AWS_IAM_USER_ARN`** and **`STORAGE_AWS_EXTERNAL_ID`**.
 
-![Storage integration example in Snowflake](sandbox:/mnt/data/extracted_pdf_images/page8_img1.png)
 
----
+
+
 
 ## Step 6 - Update role trust relationship with Snowflake values
 
@@ -145,9 +118,7 @@ The `DESC INTEGRATION` result returns two important values you will copy: **`STO
 }
 ```
 
-![Edit trust relationship in IAM role](sandbox:/mnt/data/extracted_pdf_images/page4_img1.png)
 
----
 
 ## Step 7 - Create file format & external stage in Snowflake
 
@@ -175,9 +146,6 @@ CREATE OR REPLACE STAGE patient_snowpipe_stage
 LIST @patient_snowpipe_stage;
 ```
 
-![Create file format UI example](sandbox:/mnt/data/extracted_pdf_images/page10_img1.png)
-
----
 
 ## Step 8 - Create Snowpipe(s) with AUTO_INGEST = TRUE
 
@@ -196,9 +164,8 @@ SHOW PIPES;
 
 Copy the `notification_channel` value (SQS ARN) from `SHOW PIPES` or from the Pipes UI — you will use it as the destination for S3 notifications.
 
-![Create pipe - Snowpipe example](sandbox:/mnt/data/extracted_pdf_images/page11_img1.png)
 
----
+
 
 ## Step 9 - Configure S3 Event Notification → SQS → Snowpipe
 
@@ -208,7 +175,7 @@ Copy the `notification_channel` value (SQS ARN) from `SHOW PIPES` or from the Pi
 4. Destination: **SQS queue** → **Enter SQS queue ARN** → paste the `notification_channel` ARN from Snowflake.
 5. Save.
 
-![S3 Event notification UI example](sandbox:/mnt/data/extracted_pdf_images/page12_img1.png)
+
 
 Now, files uploaded to the configured folder will trigger S3 → SQS → Snowpipe and Snowpipe will auto-load the files into the target table.
 
@@ -242,22 +209,6 @@ FROM TABLE(
 );
 ```
 
-![ALT_TEXT](images/screenshot1.png)
 
-![Snowpipe status & copy history example](sandbox:/mnt/data/extracted_pdf_images/page1_img1.png)
 
 ---
-
-## Images archive
-
-I extracted the PDF screenshots and saved them for you. Download the full archive here:
-
-[Download extracted images (ZIP)](sandbox:/mnt/data/extracted_pdf_images.zip)
-
----
-
-If you want any of these changes:
-
-* Move this guide into a GitHub-ready `.md` repo (I can split SQL into separate `.sql` files).
-* Produce a one-page printable checklist.
-* Replace any image with a different page image from the extracted set.
