@@ -1,6 +1,6 @@
 # ❄️ Continuous Data Loading — AWS S3 → Snowflake (Step-by-step)
 
-This guide is a **step-by-step** procedure or if you get confusion then refer the AWS_Snowflake_Continous_Data_Loading_Step_By_Step_Procedure.pdf file which uploaded.
+This document provides a complete step-by-step procedure. If you need clarification on any section, please refer to the AWS_Snowflake_Continous_Data_Loading_Step_By_Step_Procedure file uploaded in the L36_AWS_S3_Continuous_Data_Ingestion_into_Snowflake folder in the GitHub repository.
 
 ---
 
