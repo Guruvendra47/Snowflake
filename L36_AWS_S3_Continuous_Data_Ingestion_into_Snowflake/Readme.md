@@ -88,7 +88,7 @@ CREATE OR REPLACE STORAGE INTEGRATION snowpipe_integration
 DESC INTEGRATION snowpipe_integration;
 ```
 
-The `DESC INTEGRATION` result returns two important values you will copy: **`STORAGE_AWS_IAM_USER_ARN`** and **`STORAGE_AWS_EXTERNAL_ID`**.
+The `DESC INTEGRATION` result returns important values you will copy: **`STORAGE_AWS_IAM_USER_ARN`** only if you have Checked **Require external ID** (best practice when 3rd party resume this role) then you have copy **`STORAGE_AWS_EXTERNAL_ID`**.
 
 
 
@@ -97,8 +97,10 @@ The `DESC INTEGRATION` result returns two important values you will copy: **`STO
 ## Step 6 - Update role trust relationship with Snowflake values
 
 1. In AWS Console → IAM → Roles → open your role (e.g., `retail_role`).
-2. Click **Trust relationships** → **Edit trust policy**.
-3. Replace the `Principal` value with the `STORAGE_AWS_IAM_USER_ARN` and set the `sts:ExternalId` to the `STORAGE_AWS_EXTERNAL_ID` from `DESC INTEGRATION`.
+2. Click **Trust relationships** → **Edit trust Entities**.
+3. Replace the Value under **AWS** with the **`STORAGE_AWS_IAM_USER_ARN`** value which we got from snowflakes
+4.
+5.   and set the `sts:ExternalId` to the `STORAGE_AWS_EXTERNAL_ID` from `DESC INTEGRATION`.
 
 *Sample trust policy structure (fill with your actual strings):*
 
