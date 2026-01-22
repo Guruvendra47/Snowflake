@@ -98,7 +98,8 @@ The `DESC INTEGRATION` result returns important values you will copy: **`STORAGE
 
 1. In AWS Console → IAM → Roles → open your role (e.g., `retail_role`).
 2. Click **Trust relationships** → **Edit trust Entities**.
-3. Replace the Value under **AWS** with the **`STORAGE_AWS_IAM_USER_ARN`** value which we got from snowflakes
+3. Replace the Value under **AWS** with the **`STORAGE_AWS_IAM_USER_ARN`** value which we got from snowflakes and **sts:ExternalId** with **`STORAGE_AWS_EXTERNAL_ID`**.
+
 
 *Sample trust policy structure (fill with your actual strings):*
 
