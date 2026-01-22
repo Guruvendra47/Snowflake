@@ -66,7 +66,7 @@ This document provides a complete step-by-step procedure. If you need clarificat
 
 1. IAM → Roles → Create role → Trusted entity type: **AWS account**.
 2. (Optional) Check **Require external ID** and enter a placeholder (we update this later).
-3. Attach the policy created in Step 3 and create the role (e.g., `retail_role`).
+3. Attach the policy created in Step 3 with the role (e.g., `retail_role`).
 4. Copy the **Role ARN** — you will use it in Snowflake.
 
 
