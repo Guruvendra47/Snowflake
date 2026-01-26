@@ -105,7 +105,7 @@ FILE_FORMAT = csv_ff;
 
 LIST @iceberg_ext_s3_stage;
 
-
+------------------------------------------------------------Load-Data----------------------------------------------------
 
 COPY INTO customer_detail
 FROM @iceberg_ext_s3_stage
